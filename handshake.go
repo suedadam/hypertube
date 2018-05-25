@@ -6,7 +6,7 @@
 /*   By: asyed <asyed@student.42.fr>                +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2018/05/22 19:16:07 by asyed             #+#    #+#             */
-/*   Updated: 2018/05/23 13:23:14 by asyed            ###   ########.fr       */
+/*   Updated: 2018/05/25 10:07:37 by asyed            ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -52,6 +52,7 @@ func (tracker *Tracker) read_handshake(transaction_id uint32, conn *net.UDPConn)
 		return errors.New("Invalid transaction id");
 	}
 	tracker.announce_request.connection_id = binary.BigEndian.Uint64((*buffer).Bytes()[8:16]);
+	fuckit(16, *buffer);
 	return nil;
 }
 

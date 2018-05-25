@@ -6,7 +6,7 @@
 /*   By: asyed <asyed@student.42.fr>                +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2018/05/22 16:54:47 by asyed             #+#    #+#             */
-/*   Updated: 2018/05/24 14:02:12 by asyed            ###   ########.fr       */
+/*   Updated: 2018/05/25 13:10:03 by asyed            ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -38,6 +38,14 @@ type Magnet struct {
 	// mt	string;
 	// tr	[]string;
 };
+
+type ipv4_announce_response struct {
+	action			uint32;
+	transaction_id	uint32;
+	interval		uint32;
+	leechers		uint32;
+	seeders			uint32;
+}
 
 type ipv4_announce_request struct {
 	connection_id	uint64;
@@ -119,6 +127,9 @@ func (magnet *Magnet) download_torrent() (error) {
 	fmt.Println(conn.LocalAddr().String());
 	fmt.Printf("Hash = \"%s\"\n", string(tracker.announce_request.info_hash[:20]))
 	fmt.Printf("Connection ID = %d\n", tracker.announce_request.connection_id);
+	if err = tracker.announcement(conn);err != nil {
+		return (err);
+	}
 	// for ;; {
 	// 	var	ret int;
 	// 	if ret, _, err = conn.ReadFromUDP(buffer); err != nil || ret != 16 {
@@ -163,6 +174,7 @@ func torrentListen() (error) {
 		if err != nil {
 			return (err);
 		}
+		fmt.Println("Got a request");
 		go handleConnection(conn);
 	}
 	return (nil);
@@ -198,5 +210,6 @@ func main() {
 		return ;
 	}
 	fmt.Printf("OK!\n");
+	select{}
 	// fmt.Printf("%s", sample);
 }
