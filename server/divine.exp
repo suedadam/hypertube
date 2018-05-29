@@ -4,7 +4,7 @@ set file [lindex $argv 1];
 set action [lindex $argv 0];
 spawn sftp root@35.237.136.123
 expect "ssword: "
-send "kohenzjovvs\r" #password here
+send "kohnenzjovvs\r"
 expect "sftp"
 send "cd $navPath\r"
 send "$action $file\r"
