@@ -4,12 +4,14 @@ function onIMDBQuery(query)
     console.log("executing query for:", query);
     // var nameRegex = new RegExp(query);
     server.movies.find({
-        'title': new RegExp('^'+query+'$', 'i')
-    }, function(err, docs){
-        if(err)
+        title: new RegExp(query, 'i')
+    }, function (err, docs) {
+        if (err)
             console.log(err);
-        console.log("did query");
-        console.log(docs);
+        else {
+            console.log("did query");
+            console.log(docs);
+        }
     });
 }
 module.exports = {

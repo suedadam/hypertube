@@ -8,7 +8,7 @@ var http = require('http').Server(app);
 var io = require('socket.io')(http);
 var socketSearch = require('./socketSearch');
 var mongoose = require('mongoose');
-mongoose.connect("mongodb://localhost:IMDB");
+mongoose.connect("mongodb://localhost/IMDB");
 // Mongoose Schema (kUsers)
 var movieSchema = new mongoose.Schema({
     mId: {
@@ -32,22 +32,8 @@ app.use(express.static(__dirname + '/'));
 io.on('connection', function (socket) {
     console.log("A view has been collected " + socket.id);
     console.log(socketSearch);
-    socket.on("imdb query string", function (query) {
-
-        console.log("executing query for:", query);
-        // var nameRegex = new RegExp(query);
-        movies.find({
-            title: query
-        }, function (err, docs) {
-            if (err)
-                console.log(err);
-            else {
-                console.log("did query");
-                console.log(docs);
-            }
-        });
-    });
+    socket.on("imdb query string", socketSearch.onIMDBQuery);
 });
 http.listen(app.get('port'), '10.142.0.3', function () {
     console.log(' +' + app.get('port'));
-});
+})
