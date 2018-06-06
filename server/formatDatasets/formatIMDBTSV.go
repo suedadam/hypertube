@@ -11,6 +11,7 @@ type Movie struct {
 		Id		string;
 		Title	string;
 		Genres	string;
+		Year	int;
 		Rating	float64;
 		NumVotes int;
 }
@@ -52,6 +53,7 @@ func main(){
 				 // fmt.Println(oneRecord[2]);
 				 oneMovie.Title = oneRecord[2];
 				 oneMovie.Genres = oneRecord[8];
+				 oneMovie.Year,err = strconv.Atoi(oneRecord[5]);
 				 oneMovie.Rating = -1;
 				 oneMovie.NumVotes = -1;
 				 oneMovieCopy := oneMovie;
@@ -115,7 +117,7 @@ func main(){
 		if(totalMovieRecords % 1000 == 0){
 			fmt.Println("Write record ", i);
 		}
-		err := csvWriter.Write([]string{value.Id, value.Title,value.Genres,fmt.Sprint(value.Rating),strconv.Itoa(value.NumVotes)});
+		err := csvWriter.Write([]string{value.Id, value.Title,value.Genres,fmt.Sprint(value.Year), fmt.Sprint(value.Rating),strconv.Itoa(value.NumVotes)});
 		if err != nil {
 			fmt.Println(err)
 		}
