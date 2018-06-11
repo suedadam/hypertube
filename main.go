@@ -6,7 +6,7 @@
 /*   By: asyed <asyed@student.42.fr>                +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2018/05/22 16:54:47 by asyed             #+#    #+#             */
-/*   Updated: 2018/05/25 13:10:03 by asyed            ###   ########.fr       */
+/*   Updated: 2018/06/01 19:07:41 by asyed            ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -14,202 +14,179 @@ package main
 
 import (
 	"fmt"
-	"net"
-	"bytes"
+	// "net"
+	// "bytes"
+	"time"
+	"os"
 	"strings"
+	"net/http"
 	"net/url"
 	"errors"
-	"C"
-	"encoding/hex"
-	// "encoding/binary"
-	// "unsafe"
-	// "github.com/anacrolix/torrent"
-	// "reflect"
+	// "C"
+	// "encoding/hex"
+	"github.com/anacrolix/torrent"
+	"github.com/anacrolix/torrent/storage"
 )
 
-type Magnet struct {
-	values	*url.Values; // values	*map[string][]string;
-	// dn	string;
-	// xl	uint64;
-	// xt	string;
-	// as	string;
-	// xs	string;
-	// kt	string;
-	// mt	string;
-	// tr	[]string;
-};
+var StatsTable		map[string]*Torrent_info;
+var DefaultClient	torrent.Config;
 
-type ipv4_announce_response struct {
-	action			uint32;
-	transaction_id	uint32;
-	interval		uint32;
-	leechers		uint32;
-	seeders			uint32;
+type Torrent_info struct {
+	c *torrent.Client;
+	t *torrent.Torrent;
 }
 
-type ipv4_announce_request struct {
-	connection_id	uint64;
-	action			uint32;
-	transaction_id	uint32;
-	info_hash		[20]byte;
-	peer_id			[20]byte;
-	downloaded		uint64;
-	left			uint64;
-	uploaded		uint64;
-	event			uint32;
-	ip_addr			uint32;
-	key				uint32;
-	num_want		int32;
-	port			uint16;
-	pad				[2]byte;
-};
-
-type Tracker struct {
-	announce_request	ipv4_announce_request;
-	// connection_id	uint64;
-	// info_hash		[20]byte;
-
-}
-
-func (magnet *Magnet) parse_magnet(query *url.Values) (error) {
-	if query == nil {
-		return (errors.New("Query is empty"));
+func searchHandler(w http.ResponseWriter, r *http.Request) {
+	if (r.Method != http.MethodPost) {
+		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed);
+		return ;
 	}
-	magnet.values = query;
-	return (nil);
-}
-
-/*
-** I should use a worker pool for the downloading and then return
-** a link/stream to the file. 
-**
-** Do we want the traffic for the stream to tunnel through this service
-** as well or do we want to have it mandatorily be on the torrent/downloading
-** server? (This server.)
-**
-**
-** Make this so that we can properly escape the hash.
-*/
-
-func (magnet *Magnet) download_torrent() (error) {
-	var addr			*net.UDPAddr;
-	var parse			*url.URL;
-	var conn			*net.UDPConn;
-	var tracker			Tracker;
-	var err				error;
-
-	if parse, err = url.ParseRequestURI((*magnet.values)["tr"][0]); err != nil {
-		return (err);
+	if err := r.ParseForm();err != nil {
+		http.Error(w, "", http.StatusNoContent);
+		return ;
 	}
-	if addr, err = net.ResolveUDPAddr("udp", parse.Host); err != nil {
-		return (err);
-	}
-	if conn, err = net.DialUDP("udp", nil, addr); err != nil {
-		return (err);
-	}
-	defer conn.Close();
-	if ((*magnet.values)["xt"][0] == "") {
-		return errors.New("Empty hash!");
-	}
-	(*magnet.values)["xt"][0] = strings.TrimPrefix((*magnet.values)["xt"][0], "urn:");
-	(*magnet.values)["xt"][0] = strings.TrimPrefix((*magnet.values)["xt"][0], "btih:");
-	fmt.Println("Size of hash = ", len((*magnet.values)["xt"][0]));
-	if ret, err := hex.Decode(tracker.announce_request.info_hash[:20], []byte((*magnet.values)["xt"][0])); err != nil || ret != 20 {
-		if (err == nil) {
-			fmt.Println(ret, "instead of 20");
-			return errors.New("Didn't copy the correct size");
+	for key, val := range r.PostForm {
+		if strings.Compare(key, "title") == 0 {
+			fmt.Println("Title = ", val);
+			if magnet := searchTitle(val[0]);magnet != "" {
+				fmt.Fprint(w, magnet);
+			} else {
+				http.NotFound(w, r);
+				return ;
+			}
 		}
-		return err;
 	}
-	if err = tracker.handshake(conn);err != nil {
-		return (err);
+	http.Error(w, "500", http.StatusInternalServerError);
+}
+
+func downloadHandler(w http.ResponseWriter, r *http.Request) {
+	var tinfo Torrent_info;
+
+	if (r.Method != http.MethodPost) {
+		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed);
+		return ;
 	}
-	fmt.Println(conn.LocalAddr().String());
-	fmt.Printf("Hash = \"%s\"\n", string(tracker.announce_request.info_hash[:20]))
-	fmt.Printf("Connection ID = %d\n", tracker.announce_request.connection_id);
-	if err = tracker.announcement(conn);err != nil {
-		return (err);
+	if err := r.ParseForm();err != nil {
+		http.Error(w, "", http.StatusNoContent);
+		return ;
 	}
-	// for ;; {
-	// 	var	ret int;
-	// 	if ret, _, err = conn.ReadFromUDP(buffer); err != nil || ret != 16 {
-	// 		return (err);
-	// 	}
-	// 	if (ret != 16) {
-	// 		fmt.Println("Didn't read 16 ", ret);
-	// 	}
-	// 	fmt.Println("Read" + string(buffer[:ret]));
-	// }
-	return (nil);
+	for key, val := range r.PostForm {
+		if strings.Compare(key, "magnet") == 0 {
+			// fmt.Println("Magnet = ", val);
+			if displaypath, err := tinfo.download_torrent(val[0]);err == nil {
+			// if magnet := searchTitle(val[0]);magnet != "" {
+				fmt.Fprint(w, fmt.Sprintf("http://localhost:1338/%s", url.PathEscape(displaypath)))
+				// fmt.Fprint(w, "LOL IT WORKED?!");
+				return ;
+			} else {
+				http.Error(w, err.Error(), http.StatusInternalServerError);
+				return ;
+			}
+		}
+	}
+	http.Error(w, "500", http.StatusInternalServerError);
 }
 
 /*
-** The port number that the client is listening on.
-** Ports reserved for BitTorrent are typically 6881-6889.
-** Clients may choose to give up if it cannot establish a port within this range.
-**
-** Create a struct to make functions specific to this listener - IE: storing the status
-** of the file thus handleConnection is specific to file downloads
+** What do we want to do if there's multiple video files? Grab the largest?
+** ToDo: Conversion.
 */
 
-func handleConnection(conn net.Conn) {
-	var buf	bytes.Buffer;
+func (tinfo *Torrent_info) download_torrent(magnet_url string) (string, error) {
+	var largest *torrent.File;
 
-	buf.Grow(1024);
-	if _, err := conn.Read(buf.Bytes());err != nil {
-		fmt.Println("Error:", err.Error());
-	}
-	conn.Close();
-	fmt.Println(buf.Bytes());
-}
-
-func torrentListen() (error) {
-	ln, err := net.Listen("tcp", ":6881");
+	c, err := torrent.NewClient(&DefaultClient);
 	if err != nil {
-		return (err);
+		return "", err;
 	}
-	fmt.Println("Listening on", ln.Addr());
-	for {
-		conn, err := ln.Accept();
-		if err != nil {
-			return (err);
+	t, err := c.AddMagnet(magnet_url);
+	if err != nil {
+		return "", err;
+	}
+	fmt.Println("Waiting for info data.");
+	<-t.GotInfo();
+	fmt.Println("Got info data.");
+	files := t.Files();
+	largest = nil;
+	for i := 0; i < len(files); i++ {
+		if !strings.HasSuffix(files[i].DisplayPath(), ".mkv") && strings.HasSuffix(files[i].DisplayPath(), ".mp4") {
+			files[i].SetPriority(torrent.PiecePriorityNone);
+			continue ;
 		}
-		fmt.Println("Got a request");
-		go handleConnection(conn);
+		if (largest == nil || files[i].Length() >= largest.Length()) {
+			if (largest != nil) {
+				files[i].SetPriority(torrent.PiecePriorityNone);
+			}
+			largest = files[i];
+		}
+		// files[i] //Make a better way to check for file types.
 	}
-	return (nil);
+	if largest == nil {
+		return "", errors.New("No supported file types.");
+	}
+	t.DownloadAll();
+	tinfo.c = c;
+	tinfo.t = t;
+	go func() {
+		for ;; {
+			if (t.BytesCompleted() == t.Info().TotalLength()) {
+				return ;
+			}
+			fmt.Printf("%s -> [%d - %d]\n", largest.DisplayPath(), t.BytesCompleted(), t.Info().TotalLength())
+			c.WriteStatus(os.Stdout);
+			time.Sleep(time.Second);
+		}
+	}()
+	// first := largest.firstPieceIndex.Int();
+	// last := largest.firstPieceIndex.Int();
+	// largest.t.updatePiecePriorities(first, ((last - first) / 100) * 5);
+	return largest.DisplayPath(), nil;
+}
+
+func init() {
+	var baseDir storage.ClientImpl;
+
+	baseDir = storage.NewFile("storage");
+	DefaultClient.DefaultStorage = baseDir;
 }
 
 func main() {
-	const sample string = "magnet:?xt=urn:btih:3f2a441e2c4b84f25e44403328aeffc432a15ae7&dn=Ready+Player+One.2018.HDRip.X264.AC3-EVO%5BN1C%5D&tr=udp%3A%2F%2Ftracker.leechers-paradise.org%3A6969&tr=udp%3A%2F%2Fzer0day.ch%3A1337&tr=udp%3A%2F%2Fopen.demonii.com%3A1337&tr=udp%3A%2F%2Ftracker.coppersurfer.tk%3A6969&tr=udp%3A%2F%2Fexodus.desync.com%3A6969";
-	var parse	*url.URL;
-	var query	url.Values;
-	var err		error;
-	var magnet	Magnet;
-
+	mux := http.NewServeMux();
+	mux.HandleFunc("/search", searchHandler);
+	mux.HandleFunc("/download", downloadHandler);
+	// DefaultClient = NewFile("storage");
 	go func() {
-		if err = torrentListen();err != nil {
-			panic(err);
-		}
+		panic(http.ListenAndServe(":1337", mux));
 	}()
-	if parse, err = url.ParseRequestURI(sample); err != nil {
-		fmt.Printf("Error: %s\n", err);
-		return ;
-	}
-	query = parse.Query();
-	if err = magnet.parse_magnet(&query); err != nil {
-		fmt.Printf("Error: \"%s\"\n", err);
-		return ;
-	}
-	fmt.Printf("%p\n", query);
-	for i := 0; i < len((*magnet.values)["tr"]); i++ {
-		fmt.Printf("tr[%d] = \"%s\"\n", i, (*magnet.values)["tr"][i]);
-	}
-	if err = magnet.download_torrent(); err != nil {
-		fmt.Printf("Error: %s\n", err);
-		return ;
-	}
-	fmt.Printf("OK!\n");
+	go func() {
+		// http.Handle("/", http.FileServer(http.Dir("storage")));
+		panic(http.ListenAndServe(":1338", http.FileServer(http.Dir("storage"))));
+	}()
+	fmt.Println("Listening!!!");
 	select{}
-	// fmt.Printf("%s", sample);
+	// const sample string = "magnet:?xt=urn:btih:bee75372b98077bfd4de8ef03eb33e9289be5cd8&dn=Avengers+Infinity+War+2018+NEW+PROPER+720p+HD-CAM+X264+HQ-CPG&tr=udp%3A%2F%2Ftracker.leechers-paradise.org%3A6969&tr=udp%3A%2F%2Fzer0day.ch%3A1337&tr=udp%3A%2F%2Fopen.demonii.com%3A1337&tr=udp%3A%2F%2Ftracker.coppersurfer.tk%3A6969&tr=udp%3A%2F%2Fexodus.desync.com%3A6969";
+	// // const sample string = "magnet:?xt=urn:btih:3f2a441e2c4b84f25e44403328aeffc432a15ae7&dn=Ready+Player+One.2018.HDRip.X264.AC3-EVO%5BN1C%5D&tr=udp%3A%2F%2Ftracker.leechers-paradise.org%3A6969&tr=udp%3A%2F%2Fzer0day.ch%3A1337&tr=udp%3A%2F%2Fopen.demonii.com%3A1337&tr=udp%3A%2F%2Ftracker.coppersurfer.tk%3A6969&tr=udp%3A%2F%2Fexodus.desync.com%3A6969";
+	// var tinfo Torrent_info;
+
+	// go func() {
+	// 	if err := tinfo.download_torrent(sample); err != nil {
+	// 		panic(err);
+	// 	}
+	// 	for {
+	// 		info := tinfo.t.Info();
+	// 		if info == nil {
+	// 			fmt.Println("Info == nil")
+	// 		} else {
+	// 			fmt.Printf("%d vs %d\n", tinfo.t.BytesCompleted(), info.TotalLength());
+	// 			time.Sleep(time.Second);
+	// 		}
+	// 		stats := tinfo.t.Stats();
+	// 		fmt.Printf("Total = %d Pending = %d Active = %d Connected = %d Half = %d\n", stats.TotalPeers, stats.PendingPeers, stats.ActivePeers, stats.ConnectedSeeders, stats.HalfOpenPeers);
+	// 		if (tinfo.t.BytesCompleted() == info.TotalLength()) {
+	// 			break ;
+	// 		}
+	// 	}
+	// 	tinfo.c.Close();
+	// }()
+	// select{}
 }
